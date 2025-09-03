@@ -102,7 +102,7 @@ export const toggleTokenLock: ThunkCreator<Promise<any>> = (token: Token, isUnlo
         const erc20Token = new ERC20TokenContract(token.address, contractWrappers.getProvider());
         const amount = isUnlocked ? ZERO : UNLIMITED_ALLOWANCE_IN_BASE_UNITS;
         const tx = await erc20Token
-            .approve(contractWrappers.contractAddresses.erc20Proxy, amount)
+            .approve((contractWrappers.contractAddresses as any).erc20Proxy, amount)
             .sendTransactionAsync({
                 from: ethAccount,
                 ...getTransactionOptions(gasPrice),
@@ -156,7 +156,7 @@ export const updateWethBalance: ThunkCreator<Promise<any>> = (newWethBalance: Bi
         const wethBalance = getWethBalance(state);
 
         let txHash: string;
-        const wethToken = contractWrappers.weth9;
+        const wethToken = (contractWrappers as any).weth9;
         if (wethBalance.isLessThan(newWethBalance)) {
             txHash = await wethToken.deposit().sendTransactionAsync({
                 value: newWethBalance.minus(wethBalance),
@@ -231,50 +231,56 @@ export const setConnectedUserNotifications: ThunkCreator<Promise<any>> = (ethAcc
 
         const markets = getMarkets(state);
 
-        const subscription = subscribeToFillEvents({
-            exchange: contractWrappers.exchange,
-            fromBlock,
-            toBlock,
-            ethAccount,
-            fillEventCallback: async fillEvent => {
-                if (!knownTokens.isValidFillEvent(fillEvent)) {
-                    return;
-                }
+        let subscription: string | null = null;
+        
+        if ((contractWrappers as any).exchange) {
+            subscription = subscribeToFillEvents({
+                exchange: (contractWrappers as any).exchange,
+                fromBlock,
+                toBlock,
+                ethAccount,
+                fillEventCallback: async fillEvent => {
+                    if (!knownTokens.isValidFillEvent(fillEvent)) {
+                        return;
+                    }
 
-                const timestamp = await web3Wrapper.getBlockTimestampAsync(fillEvent.blockNumber || blockNumber);
-                const notification = buildOrderFilledNotification(fillEvent, knownTokens, markets);
-                dispatch(
-                    addNotifications([
-                        {
-                            ...notification,
-                            timestamp: new Date(timestamp * 1000),
-                        },
-                    ]),
-                );
-            },
-            pastFillEventsCallback: async fillEvents => {
-                const validFillEvents = fillEvents.filter(knownTokens.isValidFillEvent);
+                    const timestamp = await web3Wrapper.getBlockTimestampAsync(fillEvent.blockNumber || blockNumber);
+                    const notification = buildOrderFilledNotification(fillEvent, knownTokens, markets);
+                    dispatch(
+                        addNotifications([
+                            {
+                                ...notification,
+                                timestamp: new Date(timestamp * 1000),
+                            },
+                        ]),
+                    );
+                },
+                pastFillEventsCallback: async fillEvents => {
+                    const validFillEvents = fillEvents.filter(knownTokens.isValidFillEvent);
 
-                const notifications = await Promise.all(
-                    validFillEvents.map(async fillEvent => {
-                        const timestamp = await web3Wrapper.getBlockTimestampAsync(
-                            fillEvent.blockNumber || blockNumber,
-                        );
-                        const notification = buildOrderFilledNotification(fillEvent, knownTokens, markets);
+                    const notifications = await Promise.all(
+                        validFillEvents.map(async fillEvent => {
+                            const timestamp = await web3Wrapper.getBlockTimestampAsync(
+                                fillEvent.blockNumber || blockNumber,
+                            );
+                            const notification = buildOrderFilledNotification(fillEvent, knownTokens, markets);
 
-                        return {
-                            ...notification,
-                            timestamp: new Date(timestamp * 1000),
-                        };
-                    }),
-                );
+                            return {
+                                ...notification,
+                                timestamp: new Date(timestamp * 1000),
+                            };
+                        }),
+                    );
 
-                dispatch(addNotifications(notifications));
-            },
-        });
+                    dispatch(addNotifications(notifications));
+                },
+            });
+        } else {
+            console.warn('Exchange contract not available, skipping fill event subscription');
+        }
 
-        if (fillEventsSubscription) {
-            contractWrappers.exchange.unsubscribe(fillEventsSubscription);
+        if (fillEventsSubscription && (contractWrappers as any).exchange) {
+            (contractWrappers as any).exchange.unsubscribe(fillEventsSubscription);
         }
         fillEventsSubscription = subscription;
 
@@ -412,7 +418,7 @@ export const unlockCollectible: ThunkCreator<Promise<string>> = (collectible: Co
         const erc721Token = new ERC721TokenContract(COLLECTIBLE_ADDRESS, contractWrappers.getProvider());
 
         const tx = await erc721Token
-            .setApprovalForAll(contractWrappers.contractAddresses.erc721Proxy, true)
+            .setApprovalForAll((contractWrappers.contractAddresses as any).erc721Proxy, true)
             .sendTransactionAsync({ from: ethAccount, ...getTransactionOptions(gasPrice) });
         return tx;
     };
@@ -445,7 +451,7 @@ export const createSignedCollectibleOrder: ThunkCreator = (
             const web3Wrapper = await getWeb3Wrapper();
             const contractWrappers = await getContractWrappers();
             const wethAddress = getKnownTokens().getWethToken().address;
-            const exchangeAddress = contractWrappers.exchange.address;
+            const exchangeAddress = (contractWrappers as any).exchange?.address || '0x0000000000000000000000000000000000000000';
             let order;
             if (endPrice) {
                 throw new Error('DutchAuction currently unsupported');
