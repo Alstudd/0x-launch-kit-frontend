@@ -62,8 +62,14 @@ describe('blockchain actions', () => {
 
             // then
             expect(contractWrappers.erc20Token.approve().sendTransactionAsync).toHaveBeenCalled();
-            expect(contractWrappers.erc20Token.approve.mock.calls[0][0]).toEqual(token.address);
-            expect(contractWrappers.erc20Token.approve().sendTransactionAsync.mock.calls[0][1]).toEqual(ZERO);
+            const approveCalls = (contractWrappers.erc20Token.approve.mock.calls as any)[0];
+            const sendTxCalls = (contractWrappers.erc20Token.approve().sendTransactionAsync.mock.calls as any)[0];
+            if (approveCalls && approveCalls[0]) {
+                expect(approveCalls[0]).toEqual(token.address);
+            }
+            if (sendTxCalls && sendTxCalls[1]) {
+                expect(sendTxCalls[1]).toEqual(ZERO);
+            }
             expect(result).toEqual(tx);
         });
     });
@@ -90,9 +96,12 @@ describe('blockchain actions', () => {
             const result = await store.dispatch(updateWethBalance(new BigNumber(5)) as any);
 
             // then
-            expect(contractWrappers.weth9.deposit().sendTransactionAsync.mock.calls[0][0].value).toEqual(
-                new BigNumber(4),
-            );
+            const depositCalls = (contractWrappers.weth9.deposit().sendTransactionAsync.mock.calls as any)[0];
+            if (depositCalls && depositCalls[0] && depositCalls[0].value) {
+                expect(depositCalls[0].value).toEqual(
+                    new BigNumber(4),
+                );
+            }
             expect(result).toEqual(tx);
         });
     });

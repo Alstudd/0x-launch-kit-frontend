@@ -1,6 +1,6 @@
 import { ConnectedRouter } from 'connected-react-router';
 import React from 'react';
-import ReactDOM from 'react-dom';
+import { createRoot } from 'react-dom/client';
 import ReactModal from 'react-modal';
 import { Provider } from 'react-redux';
 import { Redirect, Route, Switch } from 'react-router';
@@ -23,20 +23,22 @@ if (['development', 'production'].includes(process.env.NODE_ENV) && !window.loca
 const RedirectToHome = () => <Redirect to={DEFAULT_BASE_PATH} />;
 
 const Web3WrappedApp = (
-    <Provider store={store}>
-        <ConnectedRouter history={history}>
+    <Provider store={store as any}>
+        <ConnectedRouter history={history as any}>
             <AppContainer>
                 <Switch>
-                    <Route path={ERC20_APP_BASE_PATH} component={Erc20App} />
-                    <Route path={ERC721_APP_BASE_PATH} component={Erc721App} />
-                    <Route component={RedirectToHome} />
+                    <Route path={ERC20_APP_BASE_PATH} component={Erc20App as any} />
+                    <Route path={ERC721_APP_BASE_PATH} component={Erc721App as any} />
+                    <Route component={RedirectToHome as any} />
                 </Switch>
             </AppContainer>
         </ConnectedRouter>
     </Provider>
-);
+) as any;
 
-ReactDOM.render(Web3WrappedApp, document.getElementById('root'));
+const container = document.getElementById('root');
+const root = createRoot(container!);
+root.render(Web3WrappedApp);
 
 // If you want your app to work offline and load faster, you can change
 // unregister() to register() below. Note this comes with some pitfalls.

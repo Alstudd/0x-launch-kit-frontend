@@ -3,31 +3,77 @@ import { BigNumber } from '@0x/utils';
 import { DEFAULT_ESTIMATED_TRANSACTION_TIME_MS, DEFAULT_GAS_PRICE, GWEI_IN_WEI } from '../common/constants';
 import { getLogger } from '../util/logger';
 import { GasInfo } from '../util/types';
+import { apiRateLimiter } from './api_rate_limiter';
 
-interface EthGasStationResult {
-    average: number;
-    fastestWait: number;
-    fastWait: number;
-    fast: number;
-    safeLowWait: number;
+interface InfuraGasResult {
+    low: {
+        suggestedMaxPriorityFeePerGas: string;
+        suggestedMaxFeePerGas: string;
+        estimatedBaseFee: string;
+        blockNum: number;
+        estimatedSeconds: number;
+    };
+    medium: {
+        suggestedMaxPriorityFeePerGas: string;
+        suggestedMaxFeePerGas: string;
+        estimatedBaseFee: string;
+        blockNum: number;
+        estimatedSeconds: number;
+    };
+    high: {
+        suggestedMaxPriorityFeePerGas: string;
+        suggestedMaxFeePerGas: string;
+        estimatedBaseFee: string;
+        blockNum: number;
+        estimatedSeconds: number;
+    };
+    estimatedBaseFee: string;
+    blockTime: number;
     blockNum: number;
-    avgWait: number;
-    block_time: number;
-    speed: number;
-    fastest: number;
-    safeLow: number;
 }
 
 const logger = getLogger('gas_price_estimation');
 
-const ETH_GAS_STATION_API_BASE_URL = 'https://ethgasstation.info';
+const INFURA_GAS_API_BASE_URL = 'https://gas.api.infura.io/v3';
+const INFURA_API_KEY = process.env.REACT_APP_INFURA_API_KEY || '';
 
 export const getGasEstimationInfoAsync = async (): Promise<GasInfo> => {
+    const cacheKey = 'gas_info';
+
+    const cachedGasInfo = apiRateLimiter.getCachedData<GasInfo>('infura', cacheKey);
+    if (cachedGasInfo) {
+        return cachedGasInfo;
+    }
+
+    if (!apiRateLimiter.canMakeRequest('infura')) {
+        const staleData = apiRateLimiter.getCachedData<GasInfo>('infura', cacheKey);
+        if (staleData) {
+            logger.warn('Using stale gas info due to rate limiting');
+            return staleData;
+        }
+
+        logger.warn('Rate limited and no cached data, using fallback gas info');
+        return {
+            gasPriceInWei: DEFAULT_GAS_PRICE,
+            estimatedTimeMs: DEFAULT_ESTIMATED_TRANSACTION_TIME_MS,
+        };
+    }
+    
     let fetchedAmount: GasInfo | undefined;
 
     try {
         fetchedAmount = await fetchFastAmountInWeiAsync();
+
+        apiRateLimiter.cacheData('infura', cacheKey, fetchedAmount);
     } catch (e) {
+        logger.warn('Failed to fetch gas price from Infura, using fallback:', e);
+
+        const staleData = apiRateLimiter.getCachedData<GasInfo>('infura', cacheKey);
+        if (staleData) {
+            logger.warn('Using cached gas info due to API failure');
+            return staleData;
+        }
+        
         fetchedAmount = undefined;
     }
 
@@ -40,11 +86,26 @@ export const getGasEstimationInfoAsync = async (): Promise<GasInfo> => {
 };
 
 const fetchFastAmountInWeiAsync = async (): Promise<GasInfo> => {
-    const res = await fetch(`${ETH_GAS_STATION_API_BASE_URL}/json/ethgasAPI.json`);
-    const gasInfo = (await res.json()) as EthGasStationResult;
-    // Eth Gas Station result is gwei * 10
-    const gasPriceInGwei = new BigNumber(gasInfo.fast / 10);
-    // Time is in minutes
-    const estimatedTimeMs = gasInfo.fastWait * 60 * 1000; // Minutes to MS
-    return { gasPriceInWei: gasPriceInGwei.multipliedBy(GWEI_IN_WEI), estimatedTimeMs };
+    if (!INFURA_API_KEY || INFURA_API_KEY === 'YOUR_INFURA_API_KEY') {
+        throw new Error('Infura API key not configured. Please set REACT_APP_INFURA_API_KEY environment variable.');
+    }
+
+    const url = `${INFURA_GAS_API_BASE_URL}/${INFURA_API_KEY}/networks/1/suggestedGasFees`;
+    const res = await fetch(url);
+    
+    if (!res.ok) {
+        throw new Error(`Infura gas API request failed: ${res.status} ${res.statusText}`);
+    }
+    
+    const gasInfo = (await res.json()) as InfuraGasResult;
+    
+    const suggestedMaxFeePerGas = new BigNumber(gasInfo.medium.suggestedMaxFeePerGas);
+    const estimatedSeconds = gasInfo.medium.estimatedSeconds;
+    
+    const estimatedTimeMs = estimatedSeconds * 1000;
+    
+    return { 
+        gasPriceInWei: suggestedMaxFeePerGas, 
+        estimatedTimeMs 
+    };
 };

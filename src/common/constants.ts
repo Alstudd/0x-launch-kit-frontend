@@ -1,13 +1,13 @@
 import { BigNumber } from '@0x/utils';
-
 import { Network } from '../util/types';
+import { UI_UPDATE_CHECK_INTERVAL, UPDATE_ETHER_PRICE_INTERVAL } from '../config/api_config';
 
 export const ERC20_APP_BASE_PATH = '/erc20';
 export const ERC721_APP_BASE_PATH = '/erc721';
 export const DEFAULT_BASE_PATH = process.env.REACT_APP_DEFAULT_BASE_PATH || ERC20_APP_BASE_PATH;
 
-export const RELAYER_URL = process.env.REACT_APP_RELAYER_URL || 'http://localhost:3000/v3';
-export const RELAYER_WS_URL = process.env.REACT_APP_RELAYER_WS_URL || 'ws://localhost:3000/';
+export const RELAYER_URL = process.env.REACT_APP_RELAYER_URL || 'http://localhost:3000/sra/v4';
+export const RELAYER_WS_URL = process.env.REACT_APP_RELAYER_WS_URL || 'ws://localhost:3002/sra/v4';
 
 export const TX_DEFAULTS = {
     gas: 1000000,
@@ -45,15 +45,7 @@ export const METAMASK_EXTENSION_URL = 'https://metamask.io/';
 export const METAMASK_CHROME_EXTENSION_DOWNLOAD_URL =
     'https://chrome.google.com/webstore/detail/metamask/nkbihfbeogaeaoehlefnkodbefgpgknn';
 
-// Default value is enabled, 0 is disabled
-export const UI_UPDATE_CHECK_INTERVAL: number = process.env.REACT_APP_UI_UPDATE_CHECK_INTERVAL
-    ? Number.parseInt(process.env.REACT_APP_UI_UPDATE_CHECK_INTERVAL as string, 10)
-    : 5000;
-
-// Default value is enabled, 0 is disabled
-export const UPDATE_ETHER_PRICE_INTERVAL: number = process.env.REACT_APP_UPDATE_ETHER_PRICE_INTERVAL
-    ? Number.parseInt(process.env.REACT_APP_UPDATE_ETHER_PRICE_INTERVAL as string, 10)
-    : 3600000;
+export { UI_UPDATE_CHECK_INTERVAL, UPDATE_ETHER_PRICE_INTERVAL };
 
 export const NOTIFICATIONS_LIMIT: number =
     Number.parseInt(process.env.REACT_APP_NOTIFICATIONS_LIMIT as string, 10) || 20;

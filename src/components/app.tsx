@@ -23,13 +23,24 @@ interface DispatchProps {
     onUpdateMarketPriceEther: () => any;
 }
 
+interface AppState {
+    isActiveCheckUpdates: boolean;
+}
+
 type Props = OwnProps & DispatchProps & StateProps;
 
 const localStorage = new LocalStorage(window.localStorage);
 
-class App extends React.Component<Props> {
+class App extends React.Component<Props, AppState> {
     private _updateStoreInterval: number | undefined;
     private _updatePriceEtherInterval: number | undefined;
+
+    constructor(props: Props) {
+        super(props);
+        this.state = {
+            isActiveCheckUpdates: false,
+        };
+    }
 
     public componentDidMount = () => {
         const wasWalletConnected = localStorage.getWalletConnected();
