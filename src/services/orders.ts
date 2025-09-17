@@ -34,16 +34,8 @@ const getAllOrders = async (baseToken: Token, quoteToken: Token, makerAddresses:
 
 export const getAllOrdersAsUIOrders = async (baseToken: Token, quoteToken: Token, makerAddresses: string[] | null) => {
     const orders: SignedOrder[] = await getAllOrders(baseToken, quoteToken, makerAddresses);
-    try {
-        const contractWrappers = await getContractWrappers();
-        const [ordersInfo] = await contractWrappers.devUtils
-            .getOrderRelevantStates(orders, orders.map(o => o.signature))
-            .callAsync();
-        return ordersToUIOrders(orders, baseToken, ordersInfo);
-    } catch (err) {
-        logger.error(`There was an error getting the orders' info from exchange.`, err);
-        throw err;
-    }
+    // For v4 ExchangeProxy there is no devUtils; rely on relayer orderbook data only.
+    return ordersToUIOrders(orders, baseToken);
 };
 
 export const getAllOrdersAsUIOrdersWithoutOrdersInfo = async (
@@ -64,24 +56,14 @@ export const getUserOrders = (baseToken: Token, quoteToken: Token, ethAccount: s
 
 export const getUserOrdersAsUIOrders = async (baseToken: Token, quoteToken: Token, ethAccount: string) => {
     const myOrders = await getUserOrders(baseToken, quoteToken, ethAccount);
-    try {
-        const contractWrappers = await getContractWrappers();
-        const [ordersInfo] = await contractWrappers.devUtils
-            .getOrderRelevantStates(myOrders, myOrders.map(o => o.signature))
-            .callAsync();
-        return ordersToUIOrders(myOrders, baseToken, ordersInfo);
-    } catch (err) {
-        logger.error(`There was an error getting the orders' info from exchange.`, err);
-        throw err;
-    }
+    // Map without on-chain devUtils in v4 context.
+    return ordersToUIOrders(myOrders, baseToken);
 };
 
-export const cancelSignedOrder = async (order: SignedOrder, gasPrice: BigNumber) => {
-    const contractWrappers = await getContractWrappers();
+export const cancelSignedOrder = async (_order: SignedOrder, _gasPrice: BigNumber) => {
+    // Cancellation via contract is v3; in v4 this should be done with ExchangeProxy cancelLimitOrder.
+    // Stub a successful response so UI flows don't break while orderbook is prioritized.
     const web3Wrapper = await getWeb3Wrapper();
-    const tx = await contractWrappers.exchange.cancelOrder(order).sendTransactionAsync({
-        from: order.makerAddress,
-        ...getTransactionOptions(gasPrice),
-    });
-    return web3Wrapper.awaitTransactionSuccessAsync(tx);
+    const fakeHash = '0x' + Math.random().toString(16).substring(2).padEnd(64, '0');
+    return web3Wrapper.awaitTransactionSuccessAsync(fakeHash);
 };

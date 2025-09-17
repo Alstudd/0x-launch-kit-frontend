@@ -106,6 +106,11 @@ const CollectiblesCardListStyled = styled(CollectiblesCardList)`
 `;
 
 export class CollectiblesAll extends React.Component<Props> {
+    public componentDidMount = () => {
+        if (this.props.fetchStatus === AllCollectiblesFetchStatus.Request) {
+        }
+    };
+
     public render = () => {
         const { title, description, fetchStatus } = this.props;
         const collectibles = Object.keys(this.props.collectibles).map(key => this.props.collectibles[key]);

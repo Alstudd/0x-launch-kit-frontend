@@ -23,6 +23,7 @@ import {
     sumTakerAssetFillableOrders,
 } from '../../util/orders';
 import { getTransactionOptions } from '../../util/transactions';
+import { getSwapQuote } from '../../services/swap_client';
 import {
     NotificationKind,
     OrderFeeData,
@@ -188,82 +189,33 @@ export const submitMarketOrder: ThunkCreator<Promise<{ txHash: string; amountInR
         const gasPrice = getGasPriceInWei(state);
 
         const isBuy = side === OrderSide.Buy;
-        const orders = isBuy ? getOpenSellOrders(state) : getOpenBuyOrders(state);
-        const [ordersToFill, amounts, canBeFilled] = buildMarketOrders(
+        // Swap API path (v4 compatible)
+        const baseToken = getBaseToken(state) as Token;
+        const quoteToken = getQuoteToken(state) as Token;
+        const sideStr = isBuy ? 'Buy' : 'Sell';
+        const takerAmount = amount; // already in base units upstream
+
+        const quote = await getSwapQuote({
+            side: sideStr as any,
+            baseToken: baseToken.address,
+            quoteToken: quoteToken.address,
+            amount: takerAmount,
+            takerAddress: ethAccount,
+            slippagePercentage: 0.02,
+        });
+
+        const web3Wrapper = await getWeb3Wrapper();
+        const txHash = await (web3Wrapper.getProvider() as any).send('eth_sendTransaction', [
             {
-                amount,
-                orders,
+                from: ethAccount,
+                to: quote.to,
+                data: quote.data,
+                value: quote.value || '0x0',
+                gas: quote.gas,
+                gasPrice: quote.gasPrice,
             },
-            side,
-        );
+        ]);
 
-        if (canBeFilled) {
-            const baseToken = getBaseToken(state) as Token;
-            const quoteToken = getQuoteToken(state) as Token;
-            const contractWrappers = await getContractWrappers();
-
-            // Check if the order is fillable using the forwarder
-            const ethBalance = getEthBalance(state) as BigNumber;
-            const ethAmountRequired = amounts.reduce((total: BigNumber, currentValue: BigNumber) => {
-                return total.plus(currentValue);
-            }, ZERO);
-            const protocolFee = calculateWorstCaseProtocolFee(ordersToFill, gasPrice);
-            const affiliateFeeAmount = ethAmountRequired
-                .plus(protocolFee)
-                .multipliedBy(FEE_PERCENTAGE)
-                .integerValue(BigNumber.ROUND_CEIL);
-            const totalEthAmount = ethAmountRequired.plus(protocolFee).plus(affiliateFeeAmount);
-            const isEthBalanceEnough = ethBalance.isGreaterThan(totalEthAmount);
-            // HACK(dekz): Forwarder not currently deployed in Ganache
-            const NULL_ADDRESS = '0x0000000000000000000000000000000000000000';
-            const isMarketBuyForwarder =
-                isBuy &&
-                isWeth(quoteToken.symbol) &&
-                isEthBalanceEnough &&
-                contractWrappers.forwarder.address !== NULL_ADDRESS;
-            const orderSignatures = ordersToFill.map(o => o.signature);
-
-            let txHash;
-            try {
-                if (isMarketBuyForwarder) {
-                    txHash = await contractWrappers.forwarder
-                        .marketBuyOrdersWithEth(
-                            ordersToFill,
-                            amount,
-                            orderSignatures,
-                            Web3Wrapper.toBaseUnitAmount(FEE_PERCENTAGE, 18),
-                            FEE_RECIPIENT,
-                        )
-                        .sendTransactionAsync({
-                            from: ethAccount,
-                            value: totalEthAmount,
-                            ...getTransactionOptions(gasPrice),
-                        });
-                } else {
-                    if (isBuy) {
-                        txHash = await contractWrappers.exchange
-                            .marketBuyOrdersFillOrKill(ordersToFill, amount, orderSignatures)
-                            .sendTransactionAsync({
-                                from: ethAccount,
-                                value: protocolFee,
-                                ...getTransactionOptions(gasPrice),
-                            });
-                    } else {
-                        txHash = await contractWrappers.exchange
-                            .marketSellOrdersFillOrKill(ordersToFill, amount, orderSignatures)
-                            .sendTransactionAsync({
-                                from: ethAccount,
-                                value: protocolFee,
-                                ...getTransactionOptions(gasPrice),
-                            });
-                    }
-                }
-            } catch (e) {
-                logger.log(e.message);
-                throw e;
-            }
-
-            const web3Wrapper = await getWeb3Wrapper();
             const tx = web3Wrapper.awaitTransactionSuccessAsync(txHash);
 
             // tslint:disable-next-line:no-floating-promises
@@ -284,13 +236,10 @@ export const submitMarketOrder: ThunkCreator<Promise<{ txHash: string; amountInR
                 ]),
             );
 
-            const amountInReturn = sumTakerAssetFillableOrders(side, ordersToFill, amounts);
+            // Best-effort amount in return; prefer API field if present
+            const amountInReturn = new BigNumber(quote.buyAmount || '0');
 
             return { txHash, amountInReturn };
-        } else {
-            window.alert(INSUFFICIENT_ORDERS_TO_FILL_AMOUNT_ERR);
-            throw new InsufficientOrdersAmountException();
-        }
     };
 };
 
@@ -328,7 +277,7 @@ export const fetchTakerAndMakerFee: ThunkCreator<Promise<OrderFeeData>> = (
                 price,
                 baseTokenAddress: baseToken.address,
                 quoteTokenAddress: quoteToken.address,
-                exchangeAddress: contractWrappers.exchange.address,
+                exchangeAddress: contractWrappers.exchangeProxy.address,
             },
             side,
         );

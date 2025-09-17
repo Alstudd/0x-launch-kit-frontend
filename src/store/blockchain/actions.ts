@@ -219,6 +219,7 @@ export const setConnectedUserNotifications: ThunkCreator<Promise<any>> = (ethAcc
         const state = getState();
         const web3Wrapper = await getWeb3Wrapper();
         const contractWrappers = await getContractWrappers();
+        console.log('contractWrappers', contractWrappers);
 
         const blockNumber = await web3Wrapper.getBlockNumberAsync();
 
@@ -233,9 +234,9 @@ export const setConnectedUserNotifications: ThunkCreator<Promise<any>> = (ethAcc
 
         let subscription: string | null = null;
         
-        if ((contractWrappers as any).exchange) {
+        if ((contractWrappers as any).exchangeProxy) {
             subscription = subscribeToFillEvents({
-                exchange: (contractWrappers as any).exchange,
+                exchange: (contractWrappers as any).exchangeProxy,
                 fromBlock,
                 toBlock,
                 ethAccount,
@@ -279,8 +280,17 @@ export const setConnectedUserNotifications: ThunkCreator<Promise<any>> = (ethAcc
             console.warn('Exchange contract not available, skipping fill event subscription');
         }
 
-        if (fillEventsSubscription && (contractWrappers as any).exchange) {
-            (contractWrappers as any).exchange.unsubscribe(fillEventsSubscription);
+        if (fillEventsSubscription && (contractWrappers as any).exchangeProxy) {
+            // Handle the new combined subscription format
+            if (fillEventsSubscription.includes('_')) {
+                const [limitPart, rfqPart] = fillEventsSubscription.split('_rfq_');
+                const limitSubscriptionId = limitPart.replace('limit_', '');
+                const rfqSubscriptionId = rfqPart;
+                (contractWrappers as any).exchangeProxy.unsubscribe(limitSubscriptionId);
+                (contractWrappers as any).exchangeProxy.unsubscribe(rfqSubscriptionId);
+            } else {
+                (contractWrappers as any).exchangeProxy.unsubscribe(fillEventsSubscription);
+            }
         }
         fillEventsSubscription = subscription;
 
@@ -417,8 +427,11 @@ export const unlockCollectible: ThunkCreator<Promise<string>> = (collectible: Co
         const ethAccount = getEthAccount(state);
         const erc721Token = new ERC721TokenContract(COLLECTIBLE_ADDRESS, contractWrappers.getProvider());
 
+        // TODO: Update for v4 contract structure - ERC721 proxy might be different
+        const erc721ProxyAddress = (contractWrappers.contractAddresses as any).erc721Proxy || 
+                                  contractWrappers.contractAddresses.exchangeProxy;
         const tx = await erc721Token
-            .setApprovalForAll((contractWrappers.contractAddresses as any).erc721Proxy, true)
+            .setApprovalForAll(erc721ProxyAddress, true)
             .sendTransactionAsync({ from: ethAccount, ...getTransactionOptions(gasPrice) });
         return tx;
     };
@@ -451,7 +464,7 @@ export const createSignedCollectibleOrder: ThunkCreator = (
             const web3Wrapper = await getWeb3Wrapper();
             const contractWrappers = await getContractWrappers();
             const wethAddress = getKnownTokens().getWethToken().address;
-            const exchangeAddress = (contractWrappers as any).exchange?.address || '0x0000000000000000000000000000000000000000';
+            const exchangeAddress = (contractWrappers as any).exchangeProxy?.address || '0x0000000000000000000000000000000000000000';
             let order;
             if (endPrice) {
                 throw new Error('DutchAuction currently unsupported');

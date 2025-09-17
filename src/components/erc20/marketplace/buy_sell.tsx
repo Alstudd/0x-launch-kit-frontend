@@ -267,7 +267,7 @@ class BuySell extends React.Component<Props, State> {
                                 </LabelContainer>
                                 <FieldContainer>
                                     <BigInputNumberStyled
-                                        decimals={0}
+                                        decimals={getKnownTokens().getTokenBySymbol(currencyPair.quote).decimals}
                                         min={ZERO}
                                         onChange={this.updatePrice}
                                         value={price}

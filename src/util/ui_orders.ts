@@ -1,6 +1,6 @@
 import { SignedOrder } from '@0x/connect';
 import { assetDataUtils } from '@0x/order-utils';
-import { OrderInfo } from '@0x/types';
+import { OrderInfo, OrderStatus } from '@0x/types';
 
 import { UI_DECIMALS_DISPLAYED_PRICE_ETH } from '../common/constants';
 
@@ -24,7 +24,8 @@ const ordersToUIOrdersWithoutOrderInfo = (orders: SignedOrder[], baseToken: Toke
         const side = order.takerAssetData === baseTokenEncoded ? OrderSide.Buy : OrderSide.Sell;
         const size = side === OrderSide.Sell ? order.makerAssetAmount : order.takerAssetAmount;
         const filled = null;
-        const status = null;
+        // Without on-chain devUtils, assume orders from relayer are fillable until proven otherwise.
+        const status = OrderStatus.Fillable as any;
         const price =
             side === OrderSide.Sell
                 ? order.takerAssetAmount.div(order.makerAssetAmount)

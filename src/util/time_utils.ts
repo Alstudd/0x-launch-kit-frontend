@@ -22,7 +22,7 @@ export const convertTimeInSecondsToDaysAndHours = (timeInSeconds: BigNumber) => 
 };
 
 export const getExpirationTimeOrdersFromConfig = () => {
-    return new BigNumber(todayInSeconds()).plus(DEFAULT_ORDER_EXPIRY_SECONDS);
+    return new BigNumber(todayInSeconds()).plus(DEFAULT_ORDER_EXPIRY_SECONDS).integerValue();
 };
 
 export const getEndDateStringFromTimeInSeconds = (timeInSeconds: BigNumber) => {

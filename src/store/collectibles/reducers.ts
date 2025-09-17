@@ -12,6 +12,8 @@ const initialCollectibles: CollectiblesState = {
 
 export function collectibles(state: CollectiblesState = initialCollectibles, action: RootAction): CollectiblesState {
     switch (action.type) {
+        case getType(actions.fetchAllCollectiblesAsync.request):
+            return { ...state, allCollectiblesFetchStatus: AllCollectiblesFetchStatus.Request };
         case getType(actions.fetchAllCollectiblesAsync.success):
             const allCollectibles: { [key: string]: Collectible } = {};
             action.payload.collectibles.forEach(collectible => {
@@ -19,6 +21,8 @@ export function collectibles(state: CollectiblesState = initialCollectibles, act
             });
             const allCollectiblesFetchStatus = AllCollectiblesFetchStatus.Success;
             return { ...state, allCollectibles, allCollectiblesFetchStatus };
+        case getType(actions.fetchAllCollectiblesAsync.failure):
+            return { ...state, allCollectiblesFetchStatus: AllCollectiblesFetchStatus.Failure };
         case getType(actions.selectCollectible):
             return { ...state, collectibleSelected: action.payload };
         default:

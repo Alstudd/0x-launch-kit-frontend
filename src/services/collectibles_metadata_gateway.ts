@@ -30,8 +30,8 @@ export class CollectiblesMetadataGateway {
         try {
             orders = await this._relayer.getSellCollectibleOrdersAsync(COLLECTIBLE_ADDRESS, wethAddress);
         } catch (err) {
-            logger.error(err);
-            throw err;
+            logger.warn('Failed to fetch collectible orders from relayer, continuing with empty orders:', err);
+            orders = [];
         }
 
         const tokenIdToOrder = orders.reduce<{ [tokenId: string]: SignedOrder }>((acc, order) => {
@@ -72,6 +72,11 @@ export class CollectiblesMetadataGateway {
         }
 
         collectiblesWithOrders.push(...collectiblesFetched);
+
+        if (collectiblesWithOrders.length === 0 && userAddress) {
+            const userCollectibles = await this._source.fetchAllUserCollectiblesAsync(userAddress);
+            return userCollectibles;
+        }
 
         return collectiblesWithOrders;
     };

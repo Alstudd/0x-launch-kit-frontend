@@ -90,20 +90,25 @@ const allCollectibles: Collectible[] = [
 
 export class Mocked implements CollectibleMetadataSource {
     public fetchAllUserCollectiblesAsync = async (userAddress: string): Promise<Collectible[]> => {
-        const contractAddress = COLLECTIBLE_ADDRESS;
-        const contractWrappers = await getContractWrappers();
+        // const contractAddress = COLLECTIBLE_ADDRESS;
+        // const contractWrappers = await getContractWrappers();
 
-        const allCollectiblesWithOwner = await Promise.all(
-            allCollectibles.map(async collectible => {
-                const erc721Token = new ERC721TokenContract(contractAddress, contractWrappers.getProvider());
-                const owner = await erc721Token.ownerOf(new BigNumber(collectible.tokenId)).callAsync();
+        // const allCollectiblesWithOwner = await Promise.all(
+        //     allCollectibles.map(async collectible => {
+        //         const erc721Token = new ERC721TokenContract(contractAddress, contractWrappers.getProvider());
+        //         const owner = await erc721Token.ownerOf(new BigNumber(collectible.tokenId)).callAsync();
 
-                return {
-                    ...collectible,
-                    currentOwner: owner,
-                };
-            }),
-        );
+        //         return {
+        //             ...collectible,
+        //             currentOwner: owner,
+        //         };
+        //     }),
+        // );
+
+        const allCollectiblesWithOwner = allCollectibles.map(collectible => ({
+            ...collectible,
+            currentOwner: userAddress || '0x0000000000000000000000000000000000000000',
+        }));
 
         return allCollectiblesWithOwner;
     };

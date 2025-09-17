@@ -106,8 +106,12 @@ export const startSellCollectibleSteps: ThunkCreator = (
         const ethAccount = selectors.getEthAccount(state);
 
         const erc721Token = new ERC721TokenContract(COLLECTIBLE_ADDRESS, contractWrappers.getProvider());
+        // TODO: Update for v4 contract structure - ERC721 proxy might be different
+        // For now, use the exchangeProxy address as a fallback
+        const erc721ProxyAddress = (contractWrappers.contractAddresses as any).erc721Proxy || 
+                                  contractWrappers.contractAddresses.exchangeProxy;
         const isUnlocked = await erc721Token
-            .isApprovedForAll(ethAccount, contractWrappers.contractAddresses.erc721Proxy)
+            .isApprovedForAll(ethAccount, erc721ProxyAddress)
             .callAsync();
         const sellCollectibleSteps: Step[] = createSellCollectibleSteps(
             collectible,
@@ -295,7 +299,7 @@ export const createSignedOrder: ThunkCreator = (amount: BigNumber, price: BigNum
                     price,
                     baseTokenAddress: baseToken.address,
                     quoteTokenAddress: quoteToken.address,
-                    exchangeAddress: contractWrappers.exchange.address,
+                    exchangeAddress: contractWrappers.exchangeProxy.address,
                 },
                 side,
             );

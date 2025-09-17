@@ -72,9 +72,12 @@ export const buildLimitOrder = async (params: BuildLimitOrderParams, side: Order
     const quoteTokenAssetData = assetDataUtils.encodeERC20AssetData(quoteTokenAddress);
 
     const baseTokenDecimals = getKnownTokens().getTokenByAddress(baseTokenAddress).decimals;
-    const baseTokenAmountInUnits = tokenAmountInUnitsToBigNumber(amount, baseTokenDecimals);
+    // Ensure amount and price are always integers to avoid hex conversion issues
+    const integerAmount = amount.integerValue(BigNumber.ROUND_FLOOR);
+    const integerPrice = price.integerValue(BigNumber.ROUND_FLOOR);
+    const baseTokenAmountInUnits = tokenAmountInUnitsToBigNumber(integerAmount, baseTokenDecimals);
 
-    const quoteTokenAmountInUnits = baseTokenAmountInUnits.multipliedBy(price);
+    const quoteTokenAmountInUnits = baseTokenAmountInUnits.multipliedBy(integerPrice);
 
     const quoteTokenDecimals = getKnownTokens().getTokenByAddress(quoteTokenAddress).decimals;
     const round = (num: BigNumber): BigNumber => num.integerValue(BigNumber.ROUND_FLOOR);
@@ -88,8 +91,8 @@ export const buildLimitOrder = async (params: BuildLimitOrderParams, side: Order
         exchangeAddress,
         makerAssetData: isBuy ? quoteTokenAssetData : baseTokenAssetData,
         takerAssetData: isBuy ? baseTokenAssetData : quoteTokenAssetData,
-        makerAssetAmount: isBuy ? quoteTokenAmountInBaseUnits : amount,
-        takerAssetAmount: isBuy ? amount : quoteTokenAmountInBaseUnits,
+        makerAssetAmount: isBuy ? quoteTokenAmountInBaseUnits : integerAmount,
+        takerAssetAmount: isBuy ? integerAmount : quoteTokenAmountInBaseUnits,
         makerAddress: account,
         takerAddress: ZERO_ADDRESS,
         expirationTimeSeconds: getExpirationTimeOrdersFromConfig(),
@@ -100,13 +103,52 @@ export const buildLimitOrder = async (params: BuildLimitOrderParams, side: Order
 
 export const getOrderWithTakerAndFeeConfigFromRelayer = async (orderConfigRequest: OrderConfigRequest) => {
     const client = getRelayer();
-    const orderResult = await client.getOrderConfigAsync(orderConfigRequest);
-    return {
-        ...orderConfigRequest,
-        ...orderResult,
-        chainId: CHAIN_ID,
-        salt: new BigNumber(Date.now()),
-    };
+
+    // Try SRA v4 order_config first by mapping the request
+    try {
+        const makerToken = assetDataUtils.decodeERC20AssetData(orderConfigRequest.makerAssetData).tokenAddress;
+        const takerToken = assetDataUtils.decodeERC20AssetData(orderConfigRequest.takerAssetData).tokenAddress;
+        await client.getOrderConfigV4Async({
+            maker: orderConfigRequest.makerAddress,
+            taker: orderConfigRequest.takerAddress || ZERO_ADDRESS,
+            makerToken,
+            takerToken,
+            makerAmount: orderConfigRequest.makerAssetAmount.toString(),
+            takerAmount: orderConfigRequest.takerAssetAmount.toString(),
+            verifyingContract: orderConfigRequest.exchangeAddress,
+            expiry: orderConfigRequest.expirationTimeSeconds.toString(),
+            chainId: CHAIN_ID,
+        });
+        // If it succeeded, return legacy Order shape filled with defaults compatible with signing
+        const partial: Order = {
+            chainId: CHAIN_ID,
+            salt: new BigNumber(Date.now()).integerValue(),
+            makerAddress: orderConfigRequest.makerAddress,
+            takerAddress: orderConfigRequest.takerAddress || ZERO_ADDRESS,
+            makerAssetAmount: orderConfigRequest.makerAssetAmount,
+            takerAssetAmount: orderConfigRequest.takerAssetAmount,
+            makerAssetData: orderConfigRequest.makerAssetData,
+            takerAssetData: orderConfigRequest.takerAssetData,
+            exchangeAddress: orderConfigRequest.exchangeAddress,
+            expirationTimeSeconds: orderConfigRequest.expirationTimeSeconds,
+            feeRecipientAddress: ZERO_ADDRESS,
+            senderAddress: ZERO_ADDRESS,
+            makerFee: new BigNumber(0),
+            takerFee: new BigNumber(0),
+            makerFeeAssetData: '0x',
+            takerFeeAssetData: '0x',
+        };
+        return partial;
+    } catch (e) {
+        // Fall back to legacy endpoint for older relayers
+        const orderResult = await client.getOrderConfigAsync(orderConfigRequest);
+        return {
+            ...orderConfigRequest,
+            ...orderResult,
+            chainId: CHAIN_ID,
+            salt: new BigNumber(Date.now()).integerValue(),
+        } as Order;
+    }
 };
 
 export const buildMarketOrders = (

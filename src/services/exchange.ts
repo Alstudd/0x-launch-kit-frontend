@@ -4,15 +4,19 @@ import {
     ExchangeEvents,
     ExchangeFillEventArgs,
     LogWithDecodedArgs,
+    IZeroExContract,
+    IZeroExLimitOrderFilledEventArgs,
+    IZeroExRfqOrderFilledEventArgs,
+    IZeroExEvents,
 } from '@0x/contract-wrappers';
 
 interface SubscribeToFillEventsParams {
-    exchange: ExchangeContract;
+    exchange: IZeroExContract;
     fromBlock: number;
     toBlock: number;
     ethAccount: string;
-    fillEventCallback: (log: LogWithDecodedArgs<ExchangeFillEventArgs>) => any;
-    pastFillEventsCallback: (log: Array<LogWithDecodedArgs<ExchangeFillEventArgs>>) => any;
+    fillEventCallback: (log: LogWithDecodedArgs<IZeroExLimitOrderFilledEventArgs | IZeroExRfqOrderFilledEventArgs>) => any;
+    pastFillEventsCallback: (log: Array<LogWithDecodedArgs<IZeroExLimitOrderFilledEventArgs | IZeroExRfqOrderFilledEventArgs>>) => any;
 }
 
 export const subscribeToFillEvents = ({
@@ -23,31 +27,64 @@ export const subscribeToFillEvents = ({
     fillEventCallback,
     pastFillEventsCallback,
 }: SubscribeToFillEventsParams): string => {
-    const subscription = exchange.subscribe(
-        ExchangeEvents.Fill,
-        { makerAddress: ethAccount },
-        (err: Error | null, logEvent?: DecodedLogEvent<ExchangeFillEventArgs>) => {
+    // Subscribe to LimitOrderFilled events
+    const limitOrderSubscription = exchange.subscribe(
+        IZeroExEvents.LimitOrderFilled,
+        { maker: ethAccount },
+        (err: Error | null, logEvent?: DecodedLogEvent<IZeroExLimitOrderFilledEventArgs>) => {
             if (err || !logEvent) {
-                // tslint:disable-next-line:no-console
-                console.error('There was a problem with the ExchangeFill event', err, logEvent);
+                console.error('There was a problem with the LimitOrderFilled event', err, logEvent);
                 return;
             }
             fillEventCallback(logEvent.log);
         },
     );
 
+    // Subscribe to RfqOrderFilled events
+    const rfqOrderSubscription = exchange.subscribe(
+        IZeroExEvents.RfqOrderFilled,
+        { maker: ethAccount },
+        (err: Error | null, logEvent?: DecodedLogEvent<IZeroExRfqOrderFilledEventArgs>) => {
+            if (err || !logEvent) {
+                console.error('There was a problem with the RfqOrderFilled event', err, logEvent);
+                return;
+            }
+            fillEventCallback(logEvent.log);
+        },
+    );
+
+    // Get past LimitOrderFilled events
     exchange
-        .getLogsAsync<ExchangeFillEventArgs>(
-            ExchangeEvents.Fill,
+        .getLogsAsync<IZeroExLimitOrderFilledEventArgs>(
+            IZeroExEvents.LimitOrderFilled,
             {
                 fromBlock,
                 toBlock,
             },
             {
-                makerAddress: ethAccount,
+                maker: ethAccount,
             },
         )
-        .then(pastFillEventsCallback);
+        .then(limitOrderLogs => {
+            // Get past RfqOrderFilled events
+            exchange
+                .getLogsAsync<IZeroExRfqOrderFilledEventArgs>(
+                    IZeroExEvents.RfqOrderFilled,
+                    {
+                        fromBlock,
+                        toBlock,
+                    },
+                    {
+                        maker: ethAccount,
+                    },
+                )
+                .then(rfqOrderLogs => {
+                    // Combine both event types
+                    const allLogs = [...limitOrderLogs, ...rfqOrderLogs];
+                    pastFillEventsCallback(allLogs);
+                });
+        });
 
-    return subscription;
+    // Return a combined subscription ID (we'll need to handle cleanup differently)
+    return `limit_${limitOrderSubscription}_rfq_${rfqOrderSubscription}`;
 };

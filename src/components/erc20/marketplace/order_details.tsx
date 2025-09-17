@@ -1,10 +1,11 @@
+import { assetDataUtils } from '@0x/order-utils';
 import { BigNumber, NULL_BYTES } from '@0x/utils';
 import { Web3Wrapper } from '@0x/web3-wrapper';
 import React from 'react';
 import { connect } from 'react-redux';
 import styled from 'styled-components';
 
-import { ZERO } from '../../../common/constants';
+import { ZERO, FEE_PERCENTAGE } from '../../../common/constants';
 import { fetchTakerAndMakerFee } from '../../../store/relayer/actions';
 import { getOpenBuyOrders, getOpenSellOrders } from '../../../store/selectors';
 import { getKnownTokens } from '../../../util/known_tokens';
@@ -92,6 +93,7 @@ interface State {
     takerFeeAssetData?: string;
     canOrderBeFilled?: boolean;
     quoteTokenAmount: BigNumber;
+    quoteAmountForDisplay: BigNumber;
 }
 
 class OrderDetails extends React.Component<Props, State> {
@@ -101,6 +103,7 @@ class OrderDetails extends React.Component<Props, State> {
         makerFeeAssetData: NULL_BYTES,
         takerFeeAssetData: NULL_BYTES,
         quoteTokenAmount: ZERO,
+        quoteAmountForDisplay: ZERO,
         canOrderBeFilled: true,
     };
 
@@ -154,20 +157,25 @@ class OrderDetails extends React.Component<Props, State> {
             const { quote, base } = currencyPair;
             const quoteToken = getKnownTokens().getTokenBySymbol(quote);
             const baseToken = getKnownTokens().getTokenBySymbol(base);
-            const priceInQuoteBaseUnits = Web3Wrapper.toBaseUnitAmount(tokenPrice, quoteToken.decimals);
             const baseTokenAmountInUnits = Web3Wrapper.toUnitAmount(tokenAmount, baseToken.decimals);
-            const quoteTokenAmount = baseTokenAmountInUnits.multipliedBy(priceInQuoteBaseUnits);
-            const { makerFee, makerFeeAssetData, takerFee, takerFeeAssetData } = await onFetchTakerAndMakerFee(
-                tokenAmount,
-                tokenPrice,
-                orderSide,
-            );
+            const quoteAmountInUnits = baseTokenAmountInUnits.multipliedBy(tokenPrice);
+            const quoteTokenAmount = Web3Wrapper.toBaseUnitAmount(quoteAmountInUnits, quoteToken.decimals);
+            
+            const quoteAmountForDisplay = quoteAmountInUnits;
+
+            const isBuy = orderSide === OrderSide.Buy;
+            const feeInUnits = quoteAmountInUnits.multipliedBy(FEE_PERCENTAGE);
+            const makerFee = isBuy ? ZERO : Web3Wrapper.toBaseUnitAmount(feeInUnits, quoteToken.decimals).integerValue();
+            const takerFee = isBuy ? Web3Wrapper.toBaseUnitAmount(feeInUnits, quoteToken.decimals).integerValue() : ZERO;
+            const makerFeeAssetData = FEE_PERCENTAGE.isZero() ? NULL_BYTES : assetDataUtils.encodeERC20AssetData(quoteToken.address);
+            const takerFeeAssetData = FEE_PERCENTAGE.isZero() ? NULL_BYTES : makerFeeAssetData;
             this.setState({
                 makerFeeAmount: makerFee,
                 makerFeeAssetData,
                 takerFeeAmount: takerFee,
                 takerFeeAssetData,
                 quoteTokenAmount,
+                quoteAmountForDisplay,
             });
         } else {
             const { tokenAmount, openSellOrders, openBuyOrders } = this.props;
@@ -200,8 +208,12 @@ class OrderDetails extends React.Component<Props, State> {
         // If its a Limit order the user is paying a maker fee
         const feeAssetData = orderType === OrderType.Limit ? makerFeeAssetData : takerFeeAssetData;
         const feeAmount = orderType === OrderType.Limit ? makerFeeAmount : takerFeeAmount;
-        if (feeAssetData === NULL_BYTES) {
-            return '0.00';
+        if (feeAssetData === NULL_BYTES || feeAmount.isZero()) {
+            const { quote } = this.props.currencyPair;
+            const quoteToken = getKnownTokens().getTokenBySymbol(quote);
+            // return `0.00 ${tokenSymbolToDisplayString(quoteToken.symbol)}`;
+            return `${FEE_PERCENTAGE} ${tokenSymbolToDisplayString(quoteToken.symbol)}`;
+            // return `${FEE_PERCENTAGE}`;
         }
         const feeToken = getKnownTokens().getTokenByAssetData(feeAssetData);
 
@@ -221,9 +233,15 @@ class OrderDetails extends React.Component<Props, State> {
 
         const { quote } = this.props.currencyPair;
         const quoteToken = getKnownTokens().getTokenBySymbol(quote);
-        const { quoteTokenAmount } = this.state;
-        const costAmount = tokenAmountInUnits(quoteTokenAmount, quoteToken.decimals, quoteToken.displayDecimals);
-        return `${costAmount} ${tokenSymbolToDisplayString(quote)}`;
+        const { quoteTokenAmount, quoteAmountForDisplay } = this.state;
+        
+        if (orderType === OrderType.Limit && quoteAmountForDisplay) {
+            const displayAmount = quoteAmountForDisplay.toFixed(quoteToken.displayDecimals);
+            return `${displayAmount} ${tokenSymbolToDisplayString(quote)}`;
+        } else {
+            const costAmount = tokenAmountInUnits(quoteTokenAmount, quoteToken.decimals, quoteToken.displayDecimals);
+            return `${costAmount} ${tokenSymbolToDisplayString(quote)}`;
+        }
     };
 }
 

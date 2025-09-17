@@ -26,7 +26,25 @@ export const getConvertBalanceState = (state: StoreState) => state.blockchain.co
 export const getWethBalance = (state: StoreState) =>
     state.blockchain.wethTokenBalance ? state.blockchain.wethTokenBalance.balance : ZERO;
 export const getOrders = (state: StoreState) => state.relayer.orders;
-export const getUserOrders = (state: StoreState) => state.relayer.userOrders;
+// Prefer relayer.userOrders if populated; otherwise derive from all orders by maker address
+export const getUserOrders = createSelector(
+    (state: StoreState) => state.relayer.userOrders,
+    (state: StoreState) => state.relayer.orders,
+    getEthAccount,
+    (userOrders, allOrders, ethAccount) => {
+        if (userOrders && userOrders.length > 0) {
+            return userOrders;
+        }
+        if (!ethAccount) {
+            return [] as any[];
+        }
+        // Fallback: filter market orders by maker address
+        return (allOrders || []).filter((o: any) => {
+            const maker = (o.rawOrder && (o.rawOrder.makerAddress || o.rawOrder.maker)) || undefined;
+            return maker && maker.toLowerCase() === ethAccount.toLowerCase();
+        });
+    },
+);
 export const getOrderPriceSelected = (state: StoreState) => state.ui.orderPriceSelected;
 export const getNotifications = (state: StoreState) => state.ui.notifications;
 export const getHasUnreadNotifications = (state: StoreState) => state.ui.hasUnreadNotifications;

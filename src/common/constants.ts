@@ -70,8 +70,8 @@ export const ERC721_THEME_NAME: string = process.env.REACT_APP_ERC721_THEME_NAME
 
 export const COLLECTIBLES_SOURCE: string = process.env.REACT_APP_COLLECTIBLES_SOURCE || 'mocked';
 
-export const COLLECTIBLE_NAME: string = process.env.REACT_APP_COLLECTIBLE_NAME || 'Unknown';
-export const COLLECTIBLE_DESCRIPTION: string = process.env.REACT_APP_COLLECTIBLE_DESCRIPTION || 'Unknown';
+export const COLLECTIBLE_NAME: string = process.env.REACT_APP_COLLECTIBLE_NAME || '0x Collectibles';
+export const COLLECTIBLE_DESCRIPTION: string = process.env.REACT_APP_COLLECTIBLE_DESCRIPTION || 'Discover and trade unique digital collectibles on the 0x protocol';
 
 const mockERC721Address = '0x07f96aa816c1f244cbc6ef114bb2b023ba54a2eb'; // Mock ERC721 in ganache
 export const COLLECTIBLE_ADDRESS = process.env.REACT_APP_COLLECTIBLE_ADDRESS || mockERC721Address;
